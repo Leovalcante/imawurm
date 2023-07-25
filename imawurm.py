@@ -61,6 +61,7 @@ class Worm:
             )
 
         if test:
+            self.set_loglevel_debug()
             base_dir = os.path.join(".", str(uuid.uuid4()))
             os.mkdir(base_dir)
             self.create_dirs(base_dir, depth)
